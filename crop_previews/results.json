@@ -1,0 +1,66 @@
+[
+  {
+    "crop": "05_000033_medications_taken.png",
+    "field": "medications_taken",
+    "model": "trocr_latin",
+    "expected": "None",
+    "output": "None .",
+    "confidence": 0.7524
+  },
+  {
+    "crop": "05_000033_weight_kg.png",
+    "field": "weight_kg",
+    "model": "trocr_numbers",
+    "expected": "63.2",
+    "output": "63.2",
+    "confidence": 0.9986
+  },
+  {
+    "crop": "05_000069_medications_taken.png",
+    "field": "medications_taken",
+    "model": "trocr_latin",
+    "expected": "Paracetamol",
+    "output": "2 Paracetamol .",
+    "confidence": 0.9067
+  },
+  {
+    "crop": "05_000069_weight_kg.png",
+    "field": "weight_kg",
+    "model": "trocr_numbers",
+    "expected": "62.9",
+    "output": "62.9",
+    "confidence": 0.9997
+  },
+  {
+    "crop": "06_000033_treatment.png",
+    "field": "treatment",
+    "model": "trocr_latin",
+    "expected": "No treatment",
+    "output": "\" Prefer for assessment",
+    "confidence": 0.8376
+  },
+  {
+    "crop": "06_000033_weight_g.png",
+    "field": "weight_g",
+    "model": "trocr_numbers",
+    "expected": "5365",
+    "output": "5365",
+    "confidence": 0.8321
+  },
+  {
+    "crop": "06_000069_treatment.png",
+    "field": "treatment",
+    "model": "trocr_latin",
+    "expected": "Local care",
+    "output": "\" Routine follow up .",
+    "confidence": 0.764
+  },
+  {
+    "crop": "06_000069_weight_g.png",
+    "field": "weight_g",
+    "model": "trocr_numbers",
+    "expected": "3508",
+    "output": "350P",
+    "confidence": 0.996
+  }
+]

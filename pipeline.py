@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import os
 import re
 from pathlib import Path
 
@@ -36,15 +37,34 @@ def load_models():
     """Load each model once so evaluation can reuse them for several images."""
     classifier, classes = make_classifier()
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    ocr_name = "microsoft/trocr-small-handwritten"
+    ocr_root = Path(os.environ.get("SANAD_OCR_MODELS", WEIGHTS))
+    ocr_paths = {
+        "latin": ocr_root / "trocr_latin",
+        "numeric": ocr_root / "trocr_numbers",
+    }
+    for path in ocr_paths.values():
+        if not (path / "model.safetensors").exists():
+            raise FileNotFoundError(
+                f"Missing fine-tuned OCR checkpoint: {path}. "
+                "Set SANAD_OCR_MODELS to the folder containing trocr_latin and trocr_numbers."
+            )
+
+    processors = {name: TrOCRProcessor.from_pretrained(path, local_files_only=True) for name, path in ocr_paths.items()}
+    ocr_models = {
+        name: VisionEncoderDecoderModel.from_pretrained(path, local_files_only=True, use_safetensors=True).to(device).eval()
+        for name, path in ocr_paths.items()
+    }
+    if device == "cuda":
+        for model in ocr_models.values():
+            model.half()
     return {
         "classifier": classifier.to(device),
         "classes": classes,
         "maternal": YOLO(str(WEIGHTS / "maternal_yolo.pt")),
         "newborn": YOLO(str(WEIGHTS / "newborn_yolo.pt")),
         "handwriting": YOLO(str(WEIGHTS / "handwriting_yolo.pt")),
-        "ocr_processor": TrOCRProcessor.from_pretrained(ocr_name),
-        "ocr_model": VisionEncoderDecoderModel.from_pretrained(ocr_name).to(device).eval(),
+        "ocr_processors": processors,
+        "ocr_models": ocr_models,
         "device": device,
     }
 
@@ -126,20 +146,24 @@ def crop_with_margin(image, box, margin_fraction=0.15):
     return image.crop(expanded)
 
 
-def read_handwriting(crop, loaded):
+def read_handwriting(crop, loaded, route):
     """TrOCR uses a vision transformer encoder and text transformer decoder."""
-    pixels = loaded["ocr_processor"](images=crop, return_tensors="pt").pixel_values.to(loaded["device"])
+    processor = loaded["ocr_processors"][route]
+    model = loaded["ocr_models"][route]
+    pixels = processor(images=crop, return_tensors="pt").pixel_values.to(
+        loaded["device"], dtype=next(model.parameters()).dtype
+    )
     with torch.no_grad():
-        generated = loaded["ocr_model"].generate(
+        generated = model.generate(
             pixels, max_new_tokens=48, output_scores=True, return_dict_in_generate=True
         )
-    text = loaded["ocr_processor"].batch_decode(generated.sequences, skip_special_tokens=True)[0].strip()
+    text = processor.batch_decode(generated.sequences, skip_special_tokens=True)[0].strip()
 
     # Each decoder step gives probabilities for its next character/token.
     # Their mean is a simple, understandable OCR confidence estimate.
     token_confidences = []
     for step, scores in enumerate(generated.scores):
-        token = generated.sequences[0, step + 1]
+        token = generated.sequences[0, -len(generated.scores) + step]
         token_confidences.append(float(scores[0].softmax(dim=0)[token]))
     confidence = sum(token_confidences) / len(token_confidences) if token_confidences else 0.0
     return text, round(confidence, 4)
@@ -214,7 +238,8 @@ def run_pipeline(image_path, loaded=None, save_outputs=True, verbose=True):
             continue
 
         crop = crop_with_margin(image, match["handwriting"]["box"])
-        raw_text, ocr_confidence = read_handwriting(crop, loaded)
+        ocr_route = "numeric" if field_name in {"weight_kg", "weight_g"} else "latin"
+        raw_text, ocr_confidence = read_handwriting(crop, loaded, ocr_route)
         value, valid, validation_confidence, message, correction = validate(field_name, raw_text)
         stage_confidences = {
             "form_classifier": form_confidence,

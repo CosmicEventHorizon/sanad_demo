@@ -21,7 +21,12 @@ YOLO predicts a class, box and confidence in one pass. There are two two-class l
 
 `d = sqrt((x_label - x_hand)^2 + (y_label - y_hand)^2)`
 
-The nearest unused handwriting box inside 30% of the image diagonal is selected. TrOCR then uses a vision-transformer encoder and text-transformer decoder to read only that crop.
+The nearest unused handwriting box inside 30% of the image diagonal is selected. Two of our own fine-tuned TrOCR checkpoints read the crop:
+
+- `trocr_numbers` was fine-tuned on handwritten integers, decimals and units. It handles both weight fields.
+- `trocr_latin` was fine-tuned on handwritten Latin text from the generated forms. It handles medication and treatment fields.
+
+Both models started from TrOCR weights, then were trained on our generated handwriting data. The pipeline contains no generic TrOCR fallback.
 
 Validation keeps the raw OCR text. For example, an impossible newborn weight `51789` may be reported as value `5178 g` because the final `9` resembles `g`, but confidence is reduced and `needs_review` is true. A field's final confidence is the minimum confidence of every stage, so one weak stage cannot be hidden by the others.
 
@@ -32,6 +37,7 @@ cd sanad_demo
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export SANAD_OCR_MODELS=/path/to/folder/containing/trocr_latin_and_trocr_numbers
 python train_classifier.py          # CUDA is required
 python train_yolo.py                # trains all 3 YOLOs on CUDA
 ```
@@ -41,7 +47,7 @@ The copied dataset contains 320 training, 80 validation and 40 test pages. It is
 ## Run
 
 ```bash
-python pipeline.py --image data/evaluation/images/05_000017.jpg
+python pipeline.py --image data/evaluation/images/05_000033.jpg
 python evaluate.py
 ```
 
@@ -57,7 +63,7 @@ The pipeline prints every intermediate result and saves `<name>_result.json` plu
 | Handwriting YOLO precision / recall / mAP50 | 0.990 / 0.996 / 0.995 |
 | Matching accuracy (8 fields) | 0.750 |
 | Mean matched-box IoU | 0.695 |
-| TrOCR character error rate | 1.340 |
-| Final exact-match accuracy | 0.000 |
+| Fine-tuned TrOCR character error rate | 0.774 |
+| Final exact-match accuracy | 0.375 |
 
-The last two rows are intentionally reported rather than hidden: pretrained TrOCR was not fine-tuned, as required, and is the clear bottleneck on these synthetic handwriting styles. CER can exceed 1 because the OCR may insert more wrong characters than the reference contains.
+The OCR checkpoints are kept outside this small Git repository because each is about 1.33 GB. `SANAD_OCR_MODELS` must point to their parent folder.
